@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Cờ Tướng Online - Xiangqi Master</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #1e1b18;
+      --card-bg: rgba(42, 36, 32, 0.95);
+      --board-bg: #e6be8a;
+      --board-border: #5c3a21;
+      --text-color: #f3e5ab;
+      --red-piece: #c62828;
+      --black-piece: #212121;
+      --accent: #d4af37;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    body {
+      background: var(--bg-color);
+      color: var(--text-color);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 15px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 950px;
+      background: var(--card-bg);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    }
+
+    .hidden { display: none !important; }
+
+    /* Header & Controls */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+      padding-bottom: 10px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      background: #3e2723;
+      color: var(--accent);
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .btn:hover { background: var(--accent); color: #000; }
+
+    /* Menu Screens */
+    .menu-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .menu-card {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .menu-card:hover { transform: translateY(-5px); background: rgba(212, 175, 55, 0.1); }
+
+    /* Board Area Layout */
+    .game-area {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .board-container {
+      position: relative;
+      width: 450px;
+      height: 500px;
+      background: var(--board-bg);
+      border: 8px solid var(--board-border);
+      border-radius: 6px;
+      box-shadow: inset 0 0 15px rgba(0,0,0,0.5), 0 10px 25px rgba(0,0,0,0.7);
+      user-select: none;
+    }
+
+    /* Grid SVG Lines */
+    .board-svg {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* Pieces & Cells */
+    .board-grid {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+    }
+
+    .cell {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .piece {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #fdf6e3;
+      border: 2px solid #5c3a21;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: bold;
+      box-shadow: 2px 4px 6px rgba(0,0,0,0.4);
+      z-index: 10;
+      transition: transform 0.1s ease;
+    }
+
+    .piece.red { color: var(--red-piece); border-color: var(--red-piece); }
+    .piece.black { color: var(--black-piece); border-color: var(--black-piece); }
+
+    .cell.selected .piece { transform: scale(1.15); border-color: #ffd700; box-shadow: 0 0 12px #ffd700; }
+    
+    .possible-move::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      background: rgba(16, 185, 129, 0.8);
+      border-radius: 50%;
+      z-index: 5;
+    }
+
+    .last-move-src { background: rgba(255, 215, 0, 0.2); }
+    .last-move-dst { background: rgba(255, 215, 0, 0.4); }
+
+    /* Side Panel */
+    .side-panel {
+      width: 250px;
+      background: rgba(0,0,0,0.3);
+      padding: 15px;
+      border-radius: 10px;
+      border: 1px solid rgba(212, 175, 55, 0.2);
+    }
+
+    .status-box {
+      text-align: center;
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: var(--accent);
+    }
+
+    .move-history {
+      height: 250px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid #444;
+      padding: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 15px;
+      border-radius: 6px;
+    }
+
+    .modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border: 2px solid var(--accent);
+      padding: 30px;
+      border-radius: 12px;
+      text-align: center;
+      max-width: 400px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h2>🛕 Cờ Tướng Hoàng Gia (Xiangqi Master)</h2>
+    <button class="btn" id="homeBtn" onclick="showMenu()">Trang Chủ</button>
+  </div>
+
+  <!-- MENU CHÍNH -->
+  <div id="mainMenu">
+    <div class="menu-grid">
+      <div class="menu-card" onclick="openAiModal()">
+        <h3>🤖 Đấu Với Máy (AI)</h3>
+        <p>Thách thức AI với 3 cấp độ thông minh</p>
+      </div>
+      <div class="menu-card" onclick="openOnlineMenu()">
+        <h3>🌐 Đấu Online (Socket)</h3>
+        <p>Thách đấu bạn bè qua ID phòng realtime</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI MODAL -->
+  <div id="aiModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Chọn Cấp Độ AI</h3>
+      <br>
+      <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="startAiGame(1)">Dễ (Tập Chơi)</button>
+      <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="startAiGame(2)">Trung Bình</button>
+      <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="startAiGame(3)">Cao Thủ (Hard)</button>
+      <button class="btn" style="width: 100%; background: #555;" onclick="closeModal('aiModal')">Hủy</button>
+    </div>
+  </div>
+
+  <!-- ONLINE MENU -->
+  <div id="onlineMenu" class="hidden">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div class="menu-card" style="cursor: default;">
+        <h4>Tạo Phòng Mới</h4>
+        <br>
+        <button class="btn" onclick="createRoom()">Tạo Phòng & Lấy ID</button>
+        <div id="roomIdBox" class="hidden" style="margin-top: 15px;">
+          <input type="text" id="myRoomId" readonly style="width:100%; padding:8px; text-align:center;">
+          <button class="btn" style="margin-top: 8px; width:100%;" onclick="copyId()">📋 Sao Chép ID</button>
+        </div>
+      </div>
+      <div class="menu-card" style="cursor: default;">
+        <h4>Vào Phòng Có Sẵn</h4>
+        <br>
+        <input type="text" id="joinId" placeholder="Nhập ID phòng bạn..." style="width:100%; padding:8px; margin-bottom:10px;">
+        <button class="btn" onclick="joinRoom()">Vào Đấu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MÀN HÌNH CHƠI CỜ -->
+  <div id="gameScreen" class="hidden">
+    <div class="game-area">
+      <!-- BÀN CỜ -->
+      <div class="board-container" id="boardContainer">
+        <svg class="board-svg" viewBox="0 0 450 500">
+          <!-- Đường Kẻ Ngang/Dọc -->
+          <g stroke="#5c3a21" stroke-width="2">
+            <!-- 10 Hàng Ngang -->
+            <line x1="25" y1="25" x2="425" y2="25"/>
+            <line x1="25" y1="75" x2="425" y2="75"/>
+            <line x1="25" y1="125" x2="425" y2="125"/>
+            <line x1="25" y1="175" x2="425" y2="175"/>
+            <line x1="25" y1="225" x2="425" y2="225"/>
+            <line x1="25" y1="275" x2="425" y2="275"/>
+            <line x1="25" y1="325" x2="425" y2="325"/>
+            <line x1="25" y1="375" x2="425" y2="375"/>
+            <line x1="25" y1="425" x2="425" y2="425"/>
+            <line x1="25" y1="475" x2="425" y2="475"/>
+            <!-- Cột Dọc -->
+            <line x1="25" y1="25" x2="25" y2="475"/>
+            <line x1="425" y1="25" x2="425" y2="475"/>
+            <!-- 7 Cột Trong (Cắt qua Sông) -->
+            <line x1="75" y1="25" x2="75" y2="225"/><line x1="75" y1="275" x2="75" y2="475"/>
+            <line x1="125" y1="25" x2="125" y2="225"/><line x1="125" y1="275" x2="125" y2="475"/>
+            <line x1="175" y1="25" x2="175" y2="225"/><line x1="175" y1="275" x2="175" y2="475"/>
+            <line x1="225" y1="25" x2="225" y2="225"/><line x1="225" y1="275" x2="225" y2="475"/>
+            <line x1="275" y1="25" x2="275" y2="225"/><line x1="275" y1="275" x2="275" y2="475"/>
+            <line x1="325" y1="25" x2="325" y2="225"/><line x1="325" y1="275" x2="325" y2="475"/>
+            <line x1="375" y1="25" x2="375" y2="225"/><line x1="375" y1="275" x2="375" y2="475"/>
+            <!-- Cung Tướng (Sĩ/Tướng) -->
+            <line x1="175" y1="25" x2="275" y2="125"/>
+            <line x1="275" y1="25" x2="175" y2="125"/>
+            <line x1="175" y1="375" x2="275" y2="475"/>
+            <line x1="275" y1="375" x2="175" y2="475"/>
+          </g>
+          <!-- Chữ Sở Hà Hán Giới (Sông) -->
+          <text x="100" y="258" font-size="22" fill="#5c3a21" font-weight="bold">楚 河</text>
+          <text x="290" y="258" font-size="22" fill="#5c3a21" font-weight="bold">漢 界</text>
+        </svg>
+
+        <div class="board-grid" id="boardGrid"></div>
+      </div>
+
+      <!-- PANEL THÔNG TIN -->
+      <div class="side-panel">
+        <div class="status-box" id="statusBox">Lượt đi: Đỏ</div>
+        <h4 style="margin-bottom: 8px;">📜 Kỳ Phổ (Lịch Sử)</h4>
+        <div class="move-history" id="moveHistory"></div>
+        <button class="btn" style="width: 100%;" onclick="restartGame()">Chơi Lại</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // KÝ HIỆU QUÂN CỜ:
+  // Viết hoa = Đỏ (Red - đi trước), Viết thường = Đen (Black - đi sau)
+  // K/k: Tướng (King/General), A/a: Sĩ (Advisor), E/e: Tượng (Elephant), H/h: Mã (Horse), R/r: Xe (Rook), C/c: Pháo (Cannon), P/p: Tốt (Pawn)
+  
+  const PIECE_NAMES = {
+    'K': '帥', 'A': '仕', 'E': '相', 'H': '傌', 'R': '俥', 'C': '炮', 'P': '兵',
+    'k': '將', 'a': '士', 'e': '象', 'h': '馬', 'r': '車', 'c': '砲', 'p': '卒'
+  };
+
+  const INITIAL_BOARD = [
+    ['r','h','e','a','k','a','e','h','r'],
+    ['.','.','.','.','.','.','.','.','.'],
+    ['.','c','.','.','.','.','.','c','.'],
+    ['p','.','p','.','p','.','p','.','p'],
+    ['.','.','.','.','.','.','.','.','.'],
+    ['.','.','.','.','.','.','.','.','.'],
+    ['P','.','P','.','P','.','P','.','P'],
+    ['.','C','.','.','.','.','.','C','.'],
+    ['.','.','.','.','.','.','.','.','.'],
+    ['R','H','E','A','K','A','E','H','R']
+  ];
+
+  let board = [];
+  let turn = 'red'; // 'red' hoặc 'black'
+  let selectedSquare = null;
+  let validMoves = [];
+  let lastMove = null;
+  let gameMode = 'ai'; // 'ai' hoặc 'online'
+  let aiLevel = 1;
+  let playerColor = 'red'; // Online Host = red, Guest = black
+  let peer = null, conn = null;
+
+  // 1. KHỞI TẠO GAME
+  function initGame() {
+    board = JSON.parse(JSON.stringify(INITIAL_BOARD));
+    turn = 'red';
+    selectedSquare = null;
+    validMoves = [];
+    lastMove = null;
+    document.getElementById('moveHistory').innerHTML = '';
+    renderBoard();
+    updateStatus();
+  }
+
+  function renderBoard() {
+    const grid = document.getElementById('boardGrid');
+    grid.innerHTML = '';
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        
+        if (selectedSquare && selectedSquare.r === r && selectedSquare.c === c) {
+          cell.classList.add('selected');
+        }
+        if (lastMove) {
+          if (lastMove.from.r === r && lastMove.from.c === c) cell.classList.add('last-move-src');
+          if (lastMove.to.r === r && lastMove.to.c === c) cell.classList.add('last-move-dst');
+        }
+        if (validMoves.some(m => m.r === r && m.c === c)) {
+          cell.classList.add('possible-move');
+        }
+
+        const p = board[r][c];
+        if (p !== '.') {
+          const pieceDiv = document.createElement('div');
+          const isRed = p === p.toUpperCase();
+          pieceDiv.className = `piece ${isRed ? 'red' : 'black'}`;
+          pieceDiv.innerText = PIECE_NAMES[p];
+          cell.appendChild(pieceDiv);
+        }
+
+        cell.onclick = () => handleCellClick(r, c);
+        grid.appendChild(cell);
+      }
+    }
+  }
+
+  function handleCellClick(r, c) {
+    if (gameMode === 'online' && turn !== playerColor) return;
+    if (gameMode === 'ai' && turn === 'black') return;
+
+    const piece = board[r][c];
+    const isMyPiece = piece !== '.' && ((turn === 'red' && piece === piece.toUpperCase()) || (turn === 'black' && piece === piece.toLowerCase()));
+
+    if (isMyPiece) {
+      selectedSquare = { r, c };
+      validMoves = getPieceMoves(board, r, c);
+      renderBoard();
+    } else if (selectedSquare) {
+      const move = validMoves.find(m => m.r === r && m.c === c);
+      if (move) {
+        executeMove(selectedSquare, { r, c });
+        if (gameMode === 'online' && conn) {
+          conn.send({ type: 'MOVE', from: selectedSquare, to: { r, c } });
+        }
+        selectedSquare = null;
+        validMoves = [];
+        if (gameMode === 'ai' && turn === 'black') {
+          setTimeout(makeAiMove, 400);
+        }
+      }
+    }
+  }
+
+  function executeMove(from, to) {
+    const p = board[from.r][from.c];
+    const target = board[to.r][to.c];
+    board[to.r][to.c] = p;
+    board[from.r][from.c] = '.';
+
+    lastMove = { from, to };
+    turn = turn === 'red' ? 'black' : 'red';
+    
+    addHistoryLog(p, from, to, target);
+    renderBoard();
+    updateStatus();
+
+    // Kiểm tra Chiếu / Thắng
+    if (isKingInCheck(board, turn)) {
+      if (isCheckmate(board, turn)) {
+        alert(`CHIẾU BÍ! BÊN ${turn === 'red' ? 'ĐEN' : 'ĐỎ'} CHIẾN THẮNG!`);
+      } else {
+        document.getElementById('statusBox').innerText = `⚠️ CHIẾU TƯỚNG! Lượt: ${turn === 'red' ? 'Đỏ' : 'Đen'}`;
+      }
+    }
+  }
+
+  function addHistoryLog(piece, from, to, target) {
+    const log = document.getElementById('moveHistory');
+    const color = piece === piece.toUpperCase() ? 'Đỏ' : 'Đen';
+    const text = `${color}: ${PIECE_NAMES[piece]} (${from.r},${from.c}) ➔ (${to.r},${to.c}) ${target !== '.' ? 'x ' + PIECE_NAMES[target] : ''}`;
+    const item = document.createElement('div');
+    item.innerText = text;
+    log.prepend(item);
+  }
+
+  function updateStatus() {
+    document.getElementById('statusBox').innerText = `Lượt đi: ${turn === 'red' ? '🔴 ĐỎ' : '⚫ ĐEN'}`;
+  }
+
+  // 2. NGUYÊN TẮC DI CHUYỂN BÀN CỜ (RULES ENGINE)
+  function getPieceMoves(bd, r, c) {
+    const p = bd[r][c];
+    if (p === '.') return [];
+    const isRed = p === p.toUpperCase();
+    let moves = [];
+
+    switch (p.toLowerCase()) {
+      case 'k': // Tướng
+        const kDirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (let [dr,dc] of kDirs) {
+          let nr = r + dr, nc = c + dc;
+          if (nc >= 3 && nc <= 5 && ((isRed && nr >= 7 && nr <= 9) || (!isRed && nr >= 0 && nr <= 2))) {
+            if (bd[nr][nc] === '.' || (bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r: nr, c: nc});
+          }
+        }
+        break;
+
+      case 'a': // Sĩ
+        const aDirs = [[1,1],[1,-1],[-1,1],[-1,-1]];
+        for (let [dr,dc] of aDirs) {
+          let nr = r + dr, nc = c + dc;
+          if (nc >= 3 && nc <= 5 && ((isRed && nr >= 7 && nr <= 9) || (!isRed && nr >= 0 && nr <= 2))) {
+            if (bd[nr][nc] === '.' || (bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r: nr, c: nc});
+          }
+        }
+        break;
+
+      case 'e': // Tượng
+        const eDirs = [[2,2],[2,-2],[-2,2],[-2,-2]];
+        for (let [dr,dc] of eDirs) {
+          let nr = r + dr, nc = c + dc;
+          let eyeR = r + dr/2, eyeC = c + dc/2;
+          if (nc >= 0 && nc <= 8 && ((isRed && nr >= 5 && nr <= 9) || (!isRed && nr >= 0 && nr <= 4))) {
+            if (bd[eyeR][eyeC] === '.') { // Không bị cản mắt tượng
+              if (bd[nr][nc] === '.' || (bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r: nr, c: nc});
+            }
+          }
+        }
+        break;
+
+      case 'h': // Mã
+        const hDirs = [
+          {d:[-2,-1], b:[-1,0]}, {d:[-2,1], b:[-1,0]},
+          {d:[2,-1], b:[1,0]},   {d:[2,1], b:[1,0]},
+          {d:[-1,-2], b:[0,-1]}, {d:[1,-2], b:[0,-1]},
+          {d:[-1,2], b:[0,1]},   {d:[1,2], b:[0,1]}
+        ];
+        for (let m of hDirs) {
+          let nr = r + m.d[0], nc = c + m.d[1];
+          let blockR = r + m.b[0], blockC = c + m.b[1];
+          if (nr >= 0 && nr <= 9 && nc >= 0 && nc <= 8) {
+            if (bd[blockR][blockC] === '.') { // Không bị cản chân mã
+              if (bd[nr][nc] === '.' || (bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r: nr, c: nc});
+            }
+          }
+        }
+        break;
+
+      case 'r': // Xe
+        const rDirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (let [dr,dc] of rDirs) {
+          let nr = r + dr, nc = c + dc;
+          while (nr >= 0 && nr <= 9 && nc >= 0 && nc <= 8) {
+            if (bd[nr][nc] === '.') {
+              moves.push({r: nr, c: nc});
+            } else {
+              if ((bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r: nr, c: nc});
+              break;
+            }
+            nr += dr; nc += dc;
+          }
+        }
+        break;
+
+      case 'c': // Pháo
+        const cDirs = [[0,1],[0,-1],[1,0],[-1,0]];
+        for (let [dr,dc] of cDirs) {
+          let nr = r + dr, nc = c + dc;
+          let jumped = false;
+          while (nr >= 0 && nr <= 9 && nc >= 0 && nc <= 8) {
+            if (bd[nr][nc] === '.') {
+              if (!jumped) moves.push({r: nr, c: nc});
+            } else {
+              if (!jumped) {
+                jumped = true; // Nhảy qua 1 quân
+              } else {
+                if ((bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r: nr, c: nc});
+                break;
+              }
+            }
+            nr += dr; nc += dc;
+          }
+        }
+        break;
+
+      case 'p': // Tốt
+        let dir = isRed ? -1 : 1;
+        let nr = r + dir;
+        if (nr >= 0 && nr <= 9) {
+          if (bd[nr][c] === '.' || (bd[nr][c] === bd[nr][c].toUpperCase()) !== isRed) moves.push({r: nr, c: c});
+        }
+        // Đã qua sông -> được đi ngang
+        const hasCrossed = isRed ? r <= 4 : r >= 5;
+        if (hasCrossed) {
+          for (let dc of [-1, 1]) {
+            let nc = c + dc;
+            if (nc >= 0 && nc <= 8) {
+              if (bd[nr = r][nc] === '.' || (bd[nr][nc] === bd[nr][nc].toUpperCase()) !== isRed) moves.push({r, c: nc});
+            }
+          }
+        }
+        break;
+    }
+
+    // Lọc các nước đi vi phạm chống Lộ Mặt Tướng
+    return moves.filter(m => {
+      let tempBoard = JSON.parse(JSON.stringify(bd));
+      tempBoard[m.r][m.c] = tempBoard[r][c];
+      tempBoard[r][c] = '.';
+      return !isFlyingGeneral(tempBoard) && !isKingInCheck(tempBoard, isRed ? 'red' : 'black');
+    });
+  }
+
+  // Luật Lộ Mặt Tướng (Direct King Face-off)
+  function isFlyingGeneral(bd) {
+    let redKing = null, blackKing = null;
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (bd[r][c] === 'K') redKing = {r, c};
+        if (bd[r][c] === 'k') blackKing = {r, c};
+      }
+    }
+    if (redKing && blackKing && redKing.c === blackKing.c) {
+      for (let r = blackKing.r + 1; r < redKing.r; r++) {
+        if (bd[r][redKing.c] !== '.') return false;
+      }
+      return true; // Hai tướng nhìn mặt nhau mà không có quân cản
+    }
+    return false;
+  }
+
+  function isKingInCheck(bd, color) {
+    let kingSymbol = color === 'red' ? 'K' : 'k';
+    let kPos = null;
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (bd[r][c] === kingSymbol) { kPos = {r, c}; break; }
+      }
+    }
+    if (!kPos) return true;
+
+    // Kiểm tra xem đối thủ có nước nào ăn được Tướng không
+    const oppIsRed = color !== 'red';
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        const p = bd[r][c];
+        if (p !== '.' && (p === p.toUpperCase()) === oppIsRed) {
+          // Lấy nước đi thô chưa qua lọc
+          let rawMoves = getRawPieceMoves(bd, r, c);
+          if (rawMoves.some(m => m.r === kPos.r && m.c === kPos.c)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function getRawPieceMoves(bd, r, c) {
+    // Hàm hỗ trợ tìm nước đi chưa lọc trùng lặp
+    return getPieceMoves(bd, r, c);
+  }
+
+  function isCheckmate(bd, color) {
+    const isRed = color === 'red';
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        const p = bd[r][c];
+        if (p !== '.' && (p === p.toUpperCase()) === isRed) {
+          if (getPieceMoves(bd, r, c).length > 0) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // 3. BỘ NÃO AI (MINIMAX + ALPHA-BETA PRUNING)
+  const PIECE_VALUES = {
+    'k': 10000, 'r': 90, 'c': 45, 'h': 40, 'e': 20, 'a': 20, 'p': 10,
+    'K': 10000, 'R': 90, 'C': 45, 'H': 40, 'E': 20, 'A': 20, 'P': 10
+  };
+
+  function evaluateBoard(bd) {
+    let score = 0;
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        const p = bd[r][c];
+        if (p !== '.') {
+          const val = PIECE_VALUES[p] || 0;
+          score += (p === p.toLowerCase()) ? val : -val; // AI chơi Đen (viết thường)
+        }
+      }
+    }
+    return score;
+  }
+
+  function makeAiMove() {
+    let depth = aiLevel === 1 ? 1 : (aiLevel === 2 ? 2 : 3);
+    let bestMove = minimax(board, depth, -Infinity, Infinity, true).move;
+    if (bestMove) {
+      executeMove(bestMove.from, bestMove.to);
+    }
+  }
+
+  function minimax(bd, depth, alpha, beta, isMaximizing) {
+    if (depth === 0) return { score: evaluateBoard(bd) };
+
+    let allMoves = [];
+    const isRedTurn = !isMaximizing;
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 9; c++) {
+        const p = bd[r][c];
+        if (p !== '.' && (p === p.toUpperCase()) === isRedTurn) {
+          let moves = getPieceMoves(bd, r, c);
+          moves.forEach(m => allMoves.push({ from: {r, c}, to: m }));
+        }
+      }
+    }
+
+    if (allMoves.length === 0) return { score: isMaximizing ? -9999 : 9999 };
+
+    let bestMove = allMoves[Math.floor(Math.random() * allMoves.length)];
+
+    if (isMaximizing) {
+      let maxEval = -Infinity;
+      for (let move of allMoves) {
+        let tempBoard = JSON.parse(JSON.stringify(bd));
+        tempBoard[move.to.r][move.to.c] = tempBoard[move.from.r][move.from.c];
+        tempBoard[move.from.r][move.from.c] = '.';
+
+        let evaluation = minimax(tempBoard, depth - 1, alpha, beta, false).score;
+        if (evaluation > maxEval) {
+          maxEval = evaluation;
+          bestMove = move;
+        }
+        alpha = Math.max(alpha, evaluation);
+        if (beta <= alpha) break;
+      }
+      return { score: maxEval, move: bestMove };
+    } else {
+      let minEval = Infinity;
+      for (let move of allMoves) {
+        let tempBoard = JSON.parse(JSON.stringify(bd));
+        tempBoard[move.to.r][move.to.c] = tempBoard[move.from.r][move.from.c];
+        tempBoard[move.from.r][move.from.c] = '.';
+
+        let evaluation = minimax(tempBoard, depth - 1, alpha, beta, true).score;
+        if (evaluation < minEval) {
+          minEval = evaluation;
+          bestMove = move;
+        }
+        beta = Math.min(beta, evaluation);
+        if (beta <= alpha) break;
+      }
+      return { score: minEval, move: bestMove };
+    }
+  }
+
+  // 4. CHỨC NĂNG ONLINE SOCKET P2P (PEERJS)
+  function createRoom() {
+    peer = new Peer();
+    peer.on('open', id => {
+      document.getElementById('myRoomId').value = id;
+      document.getElementById('roomIdBox').classList.remove('hidden');
+    });
+    peer.on('connection', c => {
+      conn = c;
+      playerColor = 'red';
+      setupSocket();
+      gameMode = 'online';
+      startGameScreen();
+    });
+  }
+
+  function joinRoom() {
+    const id = document.getElementById('joinId').value.trim();
+    if (!id) return alert('Nhập ID phòng!');
+    peer = new Peer();
+    peer.on('open', () => {
+      conn = peer.connect(id);
+      playerColor = 'black';
+      setupSocket();
+      conn.on('open', () => {
+        gameMode = 'online';
+        startGameScreen();
+      });
+    });
+  }
+
+  function setupSocket() {
+    conn.on('data', data => {
+      if (data.type === 'MOVE') {
+        executeMove(data.from, data.to);
+      }
+    });
+  }
+
+  function copyId() {
+    const input = document.getElementById('myRoomId');
+    input.select();
+    navigator.clipboard.writeText(input.value);
+    alert('Đã chép ID!');
+  }
+
+  // UI CONTROLS
+  function showMenu() {
+    document.getElementById('mainMenu').classList.remove('hidden');
+    document.getElementById('onlineMenu').classList.add('hidden');
+    document.getElementById('gameScreen').classList.add('hidden');
+  }
+
+  function openAiModal() { document.getElementById('aiModal').classList.remove('hidden'); }
+  function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+  
+  function openOnlineMenu() {
+    document.getElementById('mainMenu').classList.add('hidden');
+    document.getElementById('onlineMenu').classList.remove('hidden');
+  }
+
+  function startAiGame(level) {
+    aiLevel = level;
+    gameMode = 'ai';
+    closeModal('aiModal');
+    startGameScreen();
+  }
+
+  function startGameScreen() {
+    document.getElementById('mainMenu').classList.add('hidden');
+    document.getElementById('onlineMenu').classList.add('hidden');
+    document.getElementById('gameScreen').classList.remove('hidden');
+    initGame();
+  }
+
+  function restartGame() { initGame(); }
+
+  // Bắt đầu ứng dụng
+  initGame();
+</script>
+</body>
+</html>
